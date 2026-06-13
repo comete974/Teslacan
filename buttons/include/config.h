@@ -1,26 +1,19 @@
 #pragma once
+#include <esp_wifi.h>
 
-// ─── Button GPIOs (ESP32-C3) ──────────────────────────────────────────────────
-// Wiring: each button connects GPIO to GND (INPUT_PULLUP).
-// Adjust pin numbers to match your PCB/breadboard layout.
+// ─── Nom de cet appareil (visible dans la page web) ──────────────────────────
+// Changer pour chaque ESP32-C3 : "Boutons_1", "Boutons_2", etc.
+#define DEVICE_NAME     "Boutons_1"
 
-#define BTN_COUNT       6
+// ─── Pins des boutons (INPUT_PULLUP, relier à GND) ───────────────────────────
+#define BTN_COUNT   6
+static const uint8_t BTN_PINS[BTN_COUNT] = { 2, 3, 4, 5, 6, 7 };
 
-#define BTN_PIN_0       2   // Button 0 — Beep mute toggle
-#define BTN_PIN_1       3   // Button 1 — Sentinel toggle
-#define BTN_PIN_2       4   // Button 2 — Trunk
-#define BTN_PIN_3       5   // Button 3 — Frunk / Lock
-#define BTN_PIN_4       6   // Button 4 — Climate / Hazard
-#define BTN_PIN_5       7   // Button 5 — Volume / Wiper
-
-// Long press threshold (ms)
+// ─── Timing ───────────────────────────────────────────────────────────────────
 #define LONG_PRESS_MS   800
-
-// Debounce time (ms)
 #define DEBOUNCE_MS     30
 
 // ─── ESP-NOW ──────────────────────────────────────────────────────────────────
-#define ESPNOW_CHANNEL  1
-
-// Server MAC — fill after reading server Serial output
+// Si le serveur est déjà connu, remplir son MAC ici.
+// Sinon, laisser FF:FF:FF:FF:FF:FF et utiliser le mode appairage sur la page web.
 #define SERVER_MAC { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }

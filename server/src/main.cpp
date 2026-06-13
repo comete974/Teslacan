@@ -5,99 +5,166 @@
 #include "../../shared/protocol.h"
 #include "can_ids.h"
 #include "config.h"
+#include "peers.h"
+#include "web.h"
+#include "ble.h"
 
-// ─── Global state ─────────────────────────────────────────────────────────────
+// ─── Global Tesla state (also read by web.cpp) ────────────────────────────────
 struct TeslaState {
     float   speed_kmh       = 0;
     float   speed_limit_kmh = 0;
-    uint8_t gear            = 0;    // 0=P 1=R 2=N 3=D
+    uint8_t gear            = 0;
     bool    beep_muted      = false;
     bool    sentinel_on     = false;
-    bool    auto_muted      = false; // tracks if auto-mute was already applied
+    bool    auto_muted      = false;
     int8_t  soc             = 0;
     int8_t  outside_temp    = 0;
     uint8_t wiper_level     = 0;
     uint8_t inside_temp     = 0;
 };
+TeslaState tesla;
 
-static TeslaState tesla;
-
-// ─── ESP-NOW peers ────────────────────────────────────────────────────────────
-static uint8_t display_mac[6] = DISPLAY_MAC;
-static uint8_t buttons_mac[6] = BUTTONS_MAC;
-
-// ─── CAN helpers ─────────────────────────────────────────────────────────────
+// ─── CAN ─────────────────────────────────────────────────────────────────────
 static void can_send(uint32_t id, const uint8_t *data, uint8_t len) {
     twai_message_t msg = {};
-    msg.identifier = id;
+    msg.identifier       = id;
     msg.data_length_code = len;
     memcpy(msg.data, data, len);
-    if (twai_transmit(&msg, pdMS_TO_TICKS(10)) != ESP_OK) {
-        Serial.printf("[CAN] TX failed id=0x%03X\n", id);
-    }
+    if (twai_transmit(&msg, pdMS_TO_TICKS(10)) != ESP_OK)
+        Serial.printf("[CAN] TX failed 0x%03X\n", id);
 }
 
-static void mute_speed_beep() {
-    uint8_t frame[] = SPEED_BEEP_MUTE_FRAME;
-    can_send(SPEED_BEEP_CAN_ID, frame, sizeof(frame));
+static void mute_beep() {
+    uint8_t f[] = SPEED_BEEP_MUTE_FRAME;
+    can_send(SPEED_BEEP_CAN_ID, f, sizeof(f));
     tesla.beep_muted = true;
-    Serial.println("[CAN] Speed beep MUTED");
+    Serial.println("[CAN] Beep MUTED");
+}
+static void restore_beep() {
+    uint8_t f[] = SPEED_BEEP_RESTORE_FRAME;
+    can_send(SPEED_BEEP_CAN_ID, f, sizeof(f));
+    tesla.beep_muted = false;
+    Serial.println("[CAN] Beep RESTORED");
 }
 
-static void restore_speed_beep() {
-    uint8_t frame[] = SPEED_BEEP_RESTORE_FRAME;
-    can_send(SPEED_BEEP_CAN_ID, frame, sizeof(frame));
-    tesla.beep_muted = false;
-    Serial.println("[CAN] Speed beep RESTORED");
+// ─── Command executor (called from ESP-NOW and BLE) ───────────────────────────
+void handle_command(uint8_t cmd_type, uint8_t /*param*/) {
+    MsgType cmd = (MsgType)cmd_type;
+    switch (cmd) {
+        case MsgType::CMD_BEEP_TOGGLE:
+            tesla.beep_muted ? restore_beep() : mute_beep(); break;
+        case MsgType::CMD_SENTINEL_TOGGLE:
+            tesla.sentinel_on = !tesla.sentinel_on;
+            Serial.printf("[CMD] Sentinel %s\n", tesla.sentinel_on ? "ON":"OFF"); break;
+        case MsgType::CMD_TRUNK_OPEN:   { uint8_t f[8]={0x01}; can_send(CAN_ID_BODY_CTRL,f,8); break; }
+        case MsgType::CMD_TRUNK_CLOSE:  { uint8_t f[8]={0x02}; can_send(CAN_ID_BODY_CTRL,f,8); break; }
+        case MsgType::CMD_FRUNK_TOGGLE: { uint8_t f[8]={0x04}; can_send(CAN_ID_BODY_CTRL,f,8); break; }
+        case MsgType::CMD_LOCK:         { uint8_t f[8]={0x10}; can_send(CAN_ID_BODY_CTRL,f,8); break; }
+        case MsgType::CMD_UNLOCK:       { uint8_t f[8]={0x20}; can_send(CAN_ID_BODY_CTRL,f,8); break; }
+        case MsgType::CMD_HORN_SHORT:   { uint8_t f[8]={0x01,0x10}; can_send(CAN_ID_BODY_CTRL,f,8); break; }
+        case MsgType::CMD_HAZARD_TOGGLE:{ uint8_t f[8]={0x08}; can_send(CAN_ID_BODY_CTRL,f,8); break; }
+        case MsgType::CMD_WIPER_UP:     tesla.wiper_level = min((int)tesla.wiper_level+1,7); break;
+        case MsgType::CMD_WIPER_DOWN:   if(tesla.wiper_level>0) tesla.wiper_level--; break;
+        default: Serial.printf("[CMD] Unknown 0x%02X\n", cmd_type); break;
+    }
 }
 
 // ─── CAN frame processor ─────────────────────────────────────────────────────
 static void process_can(const twai_message_t &msg) {
     switch (msg.identifier) {
-
         case CAN_ID_VEHICLE_SPEED: {
-            uint16_t raw = (uint16_t)(msg.data[0] | (msg.data[1] << 8)) & 0x1FFF;
-            tesla.speed_kmh = raw * 0.036f;  // 0.01 m/s → km/h
-
-            // Auto-mute on first motion after parking
+            uint16_t raw = (uint16_t)(msg.data[0]|(msg.data[1]<<8)) & 0x1FFF;
+            tesla.speed_kmh = raw * 0.036f;
             if (!tesla.auto_muted && tesla.speed_kmh >= AUTO_MUTE_SPEED_KMH) {
-                mute_speed_beep();
-                tesla.auto_muted = true;
+                mute_beep(); tesla.auto_muted = true;
             }
-            // Reset auto-mute flag when car is parked again
-            if (tesla.speed_kmh < 0.5f && tesla.gear == 0) {
-                tesla.auto_muted = false;
-            }
+            if (tesla.speed_kmh < 0.5f && tesla.gear == 0) tesla.auto_muted = false;
             break;
         }
-
-        case CAN_ID_DI_STATE: {
-            tesla.gear = (msg.data[0] >> 3) & 0x0F;
-            break;
-        }
-
+        case CAN_ID_DI_STATE:
+            tesla.gear = (msg.data[0] >> 3) & 0x0F; break;
         case CAN_ID_SPEED_LIMIT: {
-            uint8_t raw = msg.data[3];
-            if (raw > 0 && raw < 200) {
-                tesla.speed_limit_kmh = raw;
-            }
+            uint8_t r = msg.data[3];
+            if (r > 0 && r < 200) tesla.speed_limit_kmh = r;
             break;
         }
-
         case CAN_ID_BATTERY: {
-            uint16_t raw = (uint16_t)(msg.data[0] | (msg.data[1] << 8)) & 0x3FF;
-            tesla.soc = (int8_t)(raw * 0.1f);
+            uint16_t r = (uint16_t)(msg.data[0]|(msg.data[1]<<8)) & 0x3FF;
+            tesla.soc = (int8_t)(r * 0.1f);
             break;
         }
-
-        case CAN_ID_OUTSIDE_TEMP: {
-            tesla.outside_temp = (int8_t)(msg.data[0] - 40);
-            break;
-        }
+        case CAN_ID_OUTSIDE_TEMP:
+            tesla.outside_temp = (int8_t)(msg.data[0] - 40); break;
     }
 }
 
-// ─── ESP-NOW send telemetry ───────────────────────────────────────────────────
+// ─── ESP-NOW receive ──────────────────────────────────────────────────────────
+static void on_espnow_recv(const uint8_t *mac, const uint8_t *data, int len) {
+    if (len < 1) return;
+    MsgType type = (MsgType)data[0];
+
+    // ── Discovery: button board announces itself ──────────────────────────────
+    if (type == MsgType::MSG_HELLO) {
+        const HelloMsg *h = (const HelloMsg *)data;
+        Serial.printf("[ESP-NOW] HELLO from %02X:%02X:%02X:%02X:%02X:%02X name='%s'\n",
+                      mac[0],mac[1],mac[2],mac[3],mac[4],mac[5], h->name);
+
+        HelloAckMsg ack;
+        ack.accepted = pairing_mode ? 1 : 0;
+
+        if (pairing_mode) {
+            int id = peers_add(mac, h->name, h->btn_count);
+            ack.device_id = id;
+            // Register ESP-NOW peer so we can reply
+            if (!esp_now_is_peer_exist(mac)) {
+                esp_now_peer_info_t peer = {};
+                peer.channel = 1;
+                peer.encrypt = false;
+                memcpy(peer.peer_addr, mac, 6);
+                esp_now_add_peer(&peer);
+            }
+            esp_now_send(mac, (const uint8_t *)&ack, sizeof(ack));
+            delay(10);
+            peers_push_config(id);
+            Serial.printf("[ESP-NOW] Paired device %d\n", id);
+        } else {
+            // Not in pairing mode — still reply so board knows
+            ack.device_id = 0xFF;
+            if (!esp_now_is_peer_exist(mac)) {
+                esp_now_peer_info_t peer = {};
+                peer.channel = 1;
+                peer.encrypt = false;
+                memcpy(peer.peer_addr, mac, 6);
+                esp_now_add_peer(&peer);
+            }
+            esp_now_send(mac, (const uint8_t *)&ack, sizeof(ack));
+            Serial.println("[ESP-NOW] Not in pairing mode — HELLO ignored");
+        }
+        return;
+    }
+
+    // ── Raw button event from dynamic-config board ────────────────────────────
+    if (type == MsgType::MSG_BUTTON_EVENT && len >= (int)sizeof(ButtonEventMsg)) {
+        const ButtonEventMsg *ev = (const ButtonEventMsg *)data;
+        peers_mark_seen(mac);
+        PeerDevice *d = peers_get(ev->device_id);
+        if (!d || ev->btn_index >= d->btn_count) return;
+        uint8_t cmd = ev->press_type == 0
+                      ? d->buttons[ev->btn_index].short_cmd
+                      : d->buttons[ev->btn_index].long_cmd;
+        handle_command(cmd, 0);
+        return;
+    }
+
+    // ── Legacy fixed-config command ───────────────────────────────────────────
+    if (len >= (int)sizeof(CommandMsg)) {
+        const CommandMsg *c = (const CommandMsg *)data;
+        peers_mark_seen(mac);
+        handle_command((uint8_t)c->type, c->param);
+    }
+}
+
+// ─── Telemetry broadcast ──────────────────────────────────────────────────────
 static void send_telemetry() {
     TelemetryMsg tel;
     tel.speed_kmh       = tesla.speed_kmh;
@@ -110,86 +177,14 @@ static void send_telemetry() {
     tel.wiper_level     = tesla.wiper_level;
     tel.inside_temp     = tesla.inside_temp;
 
-    esp_now_send(display_mac, (const uint8_t *)&tel, sizeof(tel));
-    esp_now_send(buttons_mac, (const uint8_t *)&tel, sizeof(tel));
-}
-
-// ─── ESP-NOW receive (commands from buttons) ──────────────────────────────────
-static void on_espnow_recv(const uint8_t *mac, const uint8_t *data, int len) {
-    if (len < 1) return;
-    CommandMsg cmd;
-    memcpy(&cmd, data, min(len, (int)sizeof(cmd)));
-
-    switch (cmd.type) {
-
-        case MsgType::CMD_BEEP_TOGGLE:
-            tesla.beep_muted ? restore_speed_beep() : mute_speed_beep();
-            break;
-
-        case MsgType::CMD_SENTINEL_TOGGLE:
-            tesla.sentinel_on = !tesla.sentinel_on;
-            // TODO: add CAN frame for sentinel once ID confirmed
-            Serial.printf("[CMD] Sentinel %s\n", tesla.sentinel_on ? "ON" : "OFF");
-            break;
-
-        case MsgType::CMD_TRUNK_OPEN: {
-            // TODO: replace with confirmed CAN frame for trunk latch
-            uint8_t frame[8] = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-            can_send(CAN_ID_BODY_CTRL, frame, 8);
-            break;
-        }
-
-        case MsgType::CMD_TRUNK_CLOSE: {
-            uint8_t frame[8] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-            can_send(CAN_ID_BODY_CTRL, frame, 8);
-            break;
-        }
-
-        case MsgType::CMD_FRUNK_TOGGLE: {
-            uint8_t frame[8] = {0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-            can_send(CAN_ID_BODY_CTRL, frame, 8);
-            break;
-        }
-
-        case MsgType::CMD_LOCK: {
-            uint8_t frame[8] = {0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-            can_send(CAN_ID_BODY_CTRL, frame, 8);
-            break;
-        }
-
-        case MsgType::CMD_UNLOCK: {
-            uint8_t frame[8] = {0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-            can_send(CAN_ID_BODY_CTRL, frame, 8);
-            break;
-        }
-
-        case MsgType::CMD_HORN_SHORT: {
-            // Short horn pulse
-            uint8_t frame[8] = {0x01, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-            can_send(CAN_ID_BODY_CTRL, frame, 8);
-            break;
-        }
-
-        case MsgType::CMD_HAZARD_TOGGLE: {
-            uint8_t frame[8] = {0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-            can_send(CAN_ID_BODY_CTRL, frame, 8);
-            break;
-        }
-
-        case MsgType::CMD_WIPER_UP:
-            tesla.wiper_level = min((int)tesla.wiper_level + 1, 7);
-            Serial.printf("[CMD] Wiper level %d\n", tesla.wiper_level);
-            break;
-
-        case MsgType::CMD_WIPER_DOWN:
-            if (tesla.wiper_level > 0) tesla.wiper_level--;
-            Serial.printf("[CMD] Wiper level %d\n", tesla.wiper_level);
-            break;
-
-        default:
-            Serial.printf("[CMD] Unknown type 0x%02X\n", (uint8_t)cmd.type);
-            break;
+    // Send to all registered peers (display + all button boards)
+    for (int i = 0; i < MAX_DEVICES; i++) {
+        PeerDevice *d = peers_get(i);
+        if (d) esp_now_send(d->mac, (const uint8_t *)&tel, sizeof(tel));
     }
+
+    ble_notify_telemetry(tesla.speed_kmh, tesla.speed_limit_kmh, tesla.gear,
+                         tesla.soc, tesla.outside_temp, tesla.beep_muted);
 }
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
@@ -198,66 +193,73 @@ void setup() {
     delay(500);
     Serial.println("\n=== TeslaCAN Server ===");
 
-    // Init ESP-NOW
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    Serial.printf("My MAC: %s\n", WiFi.macAddress().c_str());
+    // WiFi AP (channel 1) — must start before ESP-NOW
+    WiFi.mode(WIFI_AP);
+    // web_init() calls softAP internally on channel 1
+    web_init();
 
+    Serial.printf("MAC: %s\n", WiFi.softAPmacAddress().c_str());
+
+    // ESP-NOW
     if (esp_now_init() != ESP_OK) {
-        Serial.println("[ESP-NOW] Init FAILED");
-        return;
+        Serial.println("[ESP-NOW] Init FAILED"); return;
     }
     esp_now_register_recv_cb(on_espnow_recv);
 
-    auto add_peer = [](const uint8_t *mac, const char *name) {
-        esp_now_peer_info_t peer = {};
-        peer.channel = ESPNOW_CHANNEL;
-        peer.encrypt = false;
-        memcpy(peer.peer_addr, mac, 6);
-        esp_err_t err = esp_now_add_peer(&peer);
-        Serial.printf("[ESP-NOW] Peer %-8s %s\n", name,
-                      err == ESP_OK ? "OK" : "BROADCAST");
-    };
-    add_peer(display_mac, "display");
-    add_peer(buttons_mac, "buttons");
+    // Load previously paired devices from NVS
+    peers_init();
 
-    // Init TWAI (CAN)
+    // Also register display as a fixed peer if MAC is configured
+    uint8_t display_mac[6] = DISPLAY_MAC;
+    bool is_placeholder = true;
+    for (int i = 0; i < 6; i++) if (display_mac[i] != 0xFF) { is_placeholder = false; break; }
+    if (!is_placeholder) {
+        esp_now_peer_info_t peer = {};
+        peer.channel = 1; peer.encrypt = false;
+        memcpy(peer.peer_addr, display_mac, 6);
+        esp_now_add_peer(&peer);
+        Serial.println("[ESP-NOW] Display peer registered");
+    }
+
+    // BLE
+    ble_init();
+
+    // CAN (TWAI)
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
         (gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
     twai_timing_config_t  t = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t  f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-    if (twai_driver_install(&g, &t, &f) != ESP_OK ||
-        twai_start() != ESP_OK) {
-        Serial.println("[CAN] Init FAILED");
-        return;
+    if (twai_driver_install(&g,&t,&f)!=ESP_OK || twai_start()!=ESP_OK) {
+        Serial.println("[CAN] Init FAILED"); return;
     }
     Serial.println("[CAN] Ready at 500 kbps");
-    Serial.println("Server running.");
+    Serial.println("Server running. Connect to WiFi 'TeslaCAN_Config' / 192.168.4.1");
 }
 
 // ─── Loop ────────────────────────────────────────────────────────────────────
 void loop() {
-    // Drain incoming CAN frames (non-blocking)
+    // CAN receive
     twai_message_t msg;
-    while (twai_receive(&msg, 0) == ESP_OK) {
-        process_can(msg);
-    }
+    while (twai_receive(&msg, 0) == ESP_OK) process_can(msg);
 
-    // Periodic telemetry broadcast
-    static uint32_t last_tel = 0;
     uint32_t now = millis();
+
+    // Telemetry at 10 Hz
+    static uint32_t last_tel = 0;
     if (now - last_tel >= TELEMETRY_INTERVAL_MS) {
         send_telemetry();
         last_tel = now;
     }
 
-    // Periodic debug print
+    // Web server
+    web_loop();
+
+    // Debug print every 2 s
     static uint32_t last_dbg = 0;
     if (now - last_dbg >= 2000) {
-        Serial.printf("[State] %.1f km/h  limit=%.0f  gear=%d  muted=%d  SOC=%d%%  %d°C\n",
+        Serial.printf("[State] %.1f km/h  lim=%.0f  gear=%d  muted=%d  SOC=%d%%\n",
                       tesla.speed_kmh, tesla.speed_limit_kmh, tesla.gear,
-                      tesla.beep_muted, tesla.soc, tesla.outside_temp);
+                      tesla.beep_muted, tesla.soc);
         last_dbg = now;
     }
 }
