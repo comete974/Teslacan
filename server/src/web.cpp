@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include "web.h"
 #include "peers.h"
+#include "tesla_state.h"
 #include "../../shared/protocol.h"
 
 // ─── AP credentials ───────────────────────────────────────────────────────────
@@ -12,9 +13,6 @@
 #define AP_IP       "192.168.4.1"
 
 static WebServer server(80);
-
-// Forward declaration of external telemetry state (defined in main.cpp)
-extern struct TeslaState tesla;
 
 // ─── Embedded HTML page ───────────────────────────────────────────────────────
 static const char HTML[] PROGMEM = R"====(
@@ -340,7 +338,6 @@ static void handlePushConfig() {
 
 static void handleStatus() {
     cors();
-    extern struct TeslaState tesla;
     char buf[200];
     snprintf(buf, sizeof(buf),
              "{\"speed\":%.1f,\"limit\":%.0f,\"gear\":%d,"

@@ -112,10 +112,13 @@ void ble_notify_telemetry(float speed, float limit, uint8_t gear,
 // ─── Scan for nearby BLE devices ─────────────────────────────────────────────
 void ble_start_scan() {
     Serial.println("[BLE] Starting 5s scan...");
-    BLEScanResults results = ble_scan_obj->start(5, false);
+    BLEScanResults *results = ble_scan_obj->start(5, false);
+    if (!results) { ble_scan_json = "[]"; return; }
+
     String json = "[";
-    for (int i = 0; i < results.getCount(); i++) {
-        BLEAdvertisedDevice dev = results.getDevice(i);
+    int count = results->getCount();
+    for (int i = 0; i < count; i++) {
+        BLEAdvertisedDevice dev = results->getDevice(i);
         if (i > 0) json += ",";
         json += "{\"name\":\"";
         json += dev.haveName() ? dev.getName().c_str() : "";
@@ -128,5 +131,5 @@ void ble_start_scan() {
     json += "]";
     ble_scan_json = json;
     ble_scan_obj->clearResults();
-    Serial.printf("[BLE] Scan done: %d device(s)\n", results.getCount());
+    Serial.printf("[BLE] Scan done: %d device(s)\n", count);
 }

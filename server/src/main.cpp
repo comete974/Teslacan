@@ -8,20 +8,8 @@
 #include "peers.h"
 #include "web.h"
 #include "ble.h"
+#include "tesla_state.h"
 
-// ─── Global Tesla state (also read by web.cpp) ────────────────────────────────
-struct TeslaState {
-    float   speed_kmh       = 0;
-    float   speed_limit_kmh = 0;
-    uint8_t gear            = 0;
-    bool    beep_muted      = false;
-    bool    sentinel_on     = false;
-    bool    auto_muted      = false;
-    int8_t  soc             = 0;
-    int8_t  outside_temp    = 0;
-    uint8_t wiper_level     = 0;
-    uint8_t inside_temp     = 0;
-};
 TeslaState tesla;
 
 // ─── CAN ─────────────────────────────────────────────────────────────────────
@@ -99,7 +87,9 @@ static void process_can(const twai_message_t &msg) {
 }
 
 // ─── ESP-NOW receive ──────────────────────────────────────────────────────────
-static void on_espnow_recv(const uint8_t *mac, const uint8_t *data, int len) {
+// arduino-esp32 3.x uses esp_now_recv_info_t* instead of uint8_t* mac
+static void on_espnow_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+    const uint8_t *mac = info->src_addr;
     if (len < 1) return;
     MsgType type = (MsgType)data[0];
 
