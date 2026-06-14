@@ -13,16 +13,17 @@ class LGFX_AMOLED : public lgfx::LGFX_Device {
     lgfx::Touch_FT5x06  _touch;
 public:
     LGFX_AMOLED() {
-        {   // QSPI bus
+        {   // SPI bus (RM67162 uses MOSI=D0; D1-D3 wired for QSPI mode set by panel init)
             auto cfg = _bus.config();
-            cfg.spi_host   = SPI2_HOST;
-            cfg.freq_write = 80000000;
-            cfg.pin_sclk   = LCD_SCK;
-            cfg.pin_d0     = LCD_D0;
-            cfg.pin_d1     = LCD_D1;
-            cfg.pin_d2     = LCD_D2;
-            cfg.pin_d3     = LCD_D3;
-            cfg.pin_dc     = -1;
+            cfg.spi_host    = SPI2_HOST;
+            cfg.freq_write  = 80000000;
+            cfg.spi_3wire   = true;   // no DC pin — command/data encoded in transaction
+            cfg.use_lock    = true;
+            cfg.dma_channel = SPI_DMA_CH_AUTO;
+            cfg.pin_sclk    = LCD_SCK;
+            cfg.pin_mosi    = LCD_D0;
+            cfg.pin_miso    = -1;
+            cfg.pin_dc      = -1;
             _bus.config(cfg);
             _panel.setBus(&_bus);
         }
