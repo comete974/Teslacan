@@ -9,7 +9,7 @@
 // ─── LovyanGFX display class ─────────────────────────────────────────────────
 class LGFX_AMOLED : public lgfx::LGFX_Device {
     lgfx::Panel_RM67162 _panel;
-    lgfx::Bus_QSPI      _bus;
+    lgfx::Bus_SPI       _bus;
     lgfx::Touch_FT5x06  _touch;
 public:
     LGFX_AMOLED() {
@@ -254,9 +254,10 @@ static void refresh_ui(const TelemetryMsg &t) {
 }
 
 // ─── ESP-NOW receive ──────────────────────────────────────────────────────────
-static void on_espnow_recv(const uint8_t *mac, const uint8_t *data, int len) {
+static void on_espnow_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
     if (len < 1 || (MsgType)data[0] != MsgType::TELEMETRY) return;
     if (len < (int)sizeof(TelemetryMsg)) return;
+    (void)info;
     memcpy(&latest, data, sizeof(TelemetryMsg));
     data_ready = true;
 }
