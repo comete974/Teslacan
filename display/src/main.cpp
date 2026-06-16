@@ -242,7 +242,7 @@ void setup() {
     // Display init
     gfx->begin();
     gfx->setBrightness(255);
-    gfx->fillScreen(BLACK);
+    gfx->fillScreen(0x0000);
 
     // LVGL
     lv_init();
