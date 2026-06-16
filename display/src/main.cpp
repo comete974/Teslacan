@@ -62,8 +62,6 @@ static TelemetryMsg latest = {};
 static volatile bool data_ready = false;
 
 // ─── UI elements ──────────────────────────────────────────────────────────────
-static lv_obj_t *meter;
-static lv_meter_indicator_t *needle;
 static lv_obj_t *lbl_speed;
 static lv_obj_t *lbl_unit;
 static lv_obj_t *lbl_limit;
@@ -71,106 +69,55 @@ static lv_obj_t *lbl_gear;
 static lv_obj_t *lbl_mute;
 static lv_obj_t *lbl_soc;
 static lv_obj_t *lbl_temp;
-static lv_obj_t *arc_limit;
 
 static void build_ui() {
     lv_obj_t *scr = lv_scr_act();
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    // Circular meter — 440×440 centered on 466×466 round screen
-    meter = lv_meter_create(scr);
-    lv_obj_set_size(meter, 440, 440);
-    lv_obj_align(meter, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(meter, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(meter, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(meter, 0, 0);
-
-    // Scale 0–240 km/h, 300° arc
-    lv_meter_scale_t *scale = lv_meter_add_scale(meter);
-    lv_meter_set_scale_range(meter, scale, 0, 240, 300, 120);
-    lv_meter_set_scale_ticks(meter, scale, 49, 2, 10,
-                             lv_palette_lighten(LV_PALETTE_GREY, 2));
-    lv_meter_set_scale_major_ticks(meter, scale, 8, 4, 16, lv_color_white(), 14);
-
-    // Color arcs: green 0–120, orange 120–180, red 180–240
-    lv_meter_indicator_t *arc_g = lv_meter_add_arc(meter, scale, 10,
-                                                    lv_palette_main(LV_PALETTE_GREEN), 0);
-    lv_meter_set_indicator_start_value(meter, arc_g, 0);
-    lv_meter_set_indicator_end_value(meter, arc_g, 120);
-
-    lv_meter_indicator_t *arc_o = lv_meter_add_arc(meter, scale, 10,
-                                                    lv_palette_main(LV_PALETTE_ORANGE), 0);
-    lv_meter_set_indicator_start_value(meter, arc_o, 120);
-    lv_meter_set_indicator_end_value(meter, arc_o, 180);
-
-    lv_meter_indicator_t *arc_r = lv_meter_add_arc(meter, scale, 10,
-                                                    lv_palette_main(LV_PALETTE_RED), 0);
-    lv_meter_set_indicator_start_value(meter, arc_r, 180);
-    lv_meter_set_indicator_end_value(meter, arc_r, 240);
-
-    // Speed limit arc (blue) drawn inside the scale
-    arc_limit = lv_arc_create(meter);
-    lv_obj_set_size(arc_limit, 390, 390);
-    lv_obj_align(arc_limit, LV_ALIGN_CENTER, 0, 0);
-    lv_arc_set_rotation(arc_limit, 120);
-    lv_arc_set_bg_angles(arc_limit, 0, 300);
-    lv_arc_set_value(arc_limit, 0);
-    lv_obj_set_style_arc_color(arc_limit, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(arc_limit, 5, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_opa(arc_limit, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_remove_style(arc_limit, NULL, LV_PART_KNOB);
-
-    // Needle
-    needle = lv_meter_add_needle_line(meter, scale, 5,
-                                      lv_palette_main(LV_PALETTE_RED), -15);
-
-    // Speed number (center)
-    lbl_speed = lv_label_create(meter);
+    // ── Vitesse — grand chiffre centré ───────────────────────────────────────
+    lbl_speed = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_speed, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_color(lbl_speed, lv_color_white(), 0);
-    lv_obj_align(lbl_speed, LV_ALIGN_CENTER, 0, 10);
+    lv_obj_align(lbl_speed, LV_ALIGN_CENTER, 0, -15);
     lv_label_set_text(lbl_speed, "0");
 
-    lbl_unit = lv_label_create(meter);
+    lbl_unit = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_unit, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl_unit, lv_palette_lighten(LV_PALETTE_GREY, 1), 0);
-    lv_obj_align(lbl_unit, LV_ALIGN_CENTER, 0, 60);
+    lv_obj_set_style_text_color(lbl_unit, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
+    lv_obj_align(lbl_unit, LV_ALIGN_CENTER, 0, 40);
     lv_label_set_text(lbl_unit, "km/h");
 
-    // Speed limit badge (top right)
+    // ── Limite de vitesse (haut centre) ──────────────────────────────────────
     lbl_limit = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_limit, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_limit, lv_palette_main(LV_PALETTE_BLUE), 0);
-    lv_obj_align(lbl_limit, LV_ALIGN_TOP_RIGHT, -30, 30);
-    lv_label_set_text(lbl_limit, "--");
+    lv_obj_align(lbl_limit, LV_ALIGN_TOP_MID, 0, 55);
+    lv_label_set_text(lbl_limit, "");
 
-    // Gear (bottom left)
+    // ── Statut bas ───────────────────────────────────────────────────────────
     lbl_gear = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_gear, &lv_font_montserrat_36, 0);
     lv_obj_set_style_text_color(lbl_gear, lv_palette_main(LV_PALETTE_CYAN), 0);
-    lv_obj_align(lbl_gear, LV_ALIGN_BOTTOM_LEFT, 30, -30);
+    lv_obj_align(lbl_gear, LV_ALIGN_BOTTOM_LEFT, 50, -50);
     lv_label_set_text(lbl_gear, "P");
 
-    // Mute indicator (bottom center)
     lbl_mute = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(lbl_mute, lv_palette_main(LV_PALETTE_YELLOW), 0);
-    lv_obj_align(lbl_mute, LV_ALIGN_BOTTOM_MID, 0, -30);
+    lv_obj_align(lbl_mute, LV_ALIGN_BOTTOM_MID, 0, -45);
     lv_label_set_text(lbl_mute, "");
 
-    // SOC (bottom right)
     lbl_soc = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_soc, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(lbl_soc, lv_palette_main(LV_PALETTE_GREEN), 0);
-    lv_obj_align(lbl_soc, LV_ALIGN_BOTTOM_RIGHT, -30, -44);
+    lv_obj_align(lbl_soc, LV_ALIGN_BOTTOM_RIGHT, -50, -60);
     lv_label_set_text(lbl_soc, "--%");
 
-    // Temp (bottom right below SOC)
     lbl_temp = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_temp, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(lbl_temp, lv_palette_lighten(LV_PALETTE_GREY, 1), 0);
-    lv_obj_align(lbl_temp, LV_ALIGN_BOTTOM_RIGHT, -30, -24);
+    lv_obj_align(lbl_temp, LV_ALIGN_BOTTOM_RIGHT, -50, -38);
     lv_label_set_text(lbl_temp, "--\xC2\xB0""C");
 }
 
@@ -187,7 +134,6 @@ static const char *gear_str(uint8_t g) {
 static void refresh_ui(const TelemetryMsg &t) {
     char buf[16];
 
-    lv_meter_set_indicator_value(meter, needle, (int)t.speed_kmh);
     snprintf(buf, sizeof(buf), "%d", (int)t.speed_kmh);
     lv_label_set_text(lbl_speed, buf);
 
@@ -196,10 +142,8 @@ static void refresh_ui(const TelemetryMsg &t) {
     if (t.speed_limit_kmh > 0) {
         snprintf(buf, sizeof(buf), "%d", (int)t.speed_limit_kmh);
         lv_label_set_text(lbl_limit, buf);
-        lv_arc_set_value(arc_limit, (int)(t.speed_limit_kmh * 100 / 240));
     } else {
         lv_label_set_text(lbl_limit, "--");
-        lv_arc_set_value(arc_limit, 0);
     }
 
     lv_label_set_text(lbl_mute, t.beep_muted ? "MUTE" : "");
@@ -210,8 +154,13 @@ static void refresh_ui(const TelemetryMsg &t) {
     snprintf(buf, sizeof(buf), "%d\xC2\xB0""C", t.outside_temp);
     lv_label_set_text(lbl_temp, buf);
 
-    lv_color_t c = (t.speed_limit_kmh > 0 && t.speed_kmh > t.speed_limit_kmh + 3.0f)
-                   ? lv_palette_main(LV_PALETTE_RED) : lv_color_white();
+    lv_color_t c;
+    if (t.speed_limit_kmh > 0 && t.speed_kmh > t.speed_limit_kmh + 3.0f)
+        c = lv_palette_main(LV_PALETTE_RED);
+    else if (t.speed_limit_kmh > 0 && t.speed_kmh >= t.speed_limit_kmh - 5.0f)
+        c = lv_palette_main(LV_PALETTE_ORANGE);
+    else
+        c = lv_color_white();
     lv_obj_set_style_text_color(lbl_speed, c, 0);
 }
 
