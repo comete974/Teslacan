@@ -1,28 +1,24 @@
 #pragma once
 
-// ─── Waveshare ESP32-S3-Touch-AMOLED-1.75 (RM67162) ─────────────────────────
-// QSPI display interface
-#define DISPLAY_W       368
-#define DISPLAY_H       448
+// ─── Waveshare ESP32-S3-Touch-AMOLED-1.75 (CO5300, 466×466 round) ────────────
+#define DISPLAY_W   466
+#define DISPLAY_H   466
 
-#define LCD_CS          10
-#define LCD_SCK         12
-#define LCD_D0          11
-#define LCD_D1          13
-#define LCD_D2          14
-#define LCD_D3          15
-#define LCD_RST         16
-#define LCD_TE          17
+// QSPI display (from working example)
+#define LCD_CS      12
+#define LCD_CLK     38
+#define LCD_D0       4
+#define LCD_D1       5
+#define LCD_D2       6
+#define LCD_D3       7
+#define LCD_RST     39
 
-// Touch FT3168 (I2C)
-#define TOUCH_SDA       6
-#define TOUCH_SCL       7
-#define TOUCH_INT       8
-#define TOUCH_RST       9
-#define TOUCH_I2C_ADDR  0x38
+// I2C bus shared by PMU (AXP2101) and touch (FT3168)
+#define I2C_SDA     15
+#define I2C_SCL     14
 
-// Power / backlight enable
-#define PIN_POWER       38
+// Touch FT3168 — polled via Wire
+#define TOUCH_ADDR  0x38
 
 // ─── ESP-NOW ──────────────────────────────────────────────────────────────────
 #define ESPNOW_CHANNEL  1

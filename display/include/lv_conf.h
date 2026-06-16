@@ -7,6 +7,9 @@
 /* Color depth: 1/8/16/32 */
 #define LV_COLOR_DEPTH 16
 
+/* Swap RGB565 bytes so Arduino_GFX gets big-endian order */
+#define LV_COLOR_16_SWAP 1
+
 /* DPI */
 #define LV_DPI_DEF 200
 
