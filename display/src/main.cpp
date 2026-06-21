@@ -82,21 +82,21 @@ static void build_ui() {
 // ─── Boot animation — balayage 0→200→0 façon compteur de course ──────────────
 static void play_boot_animation() {
     char buf[8];
-    for (int v = 0; v <= 200; v += 2) {
+    for (int v = 0; v <= 200; v += 5) {
         snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lbl_speed, buf);
         lv_obj_center(lbl_speed);
-        lv_tick_inc(8);
-        lv_timer_handler();
-        delay(8);
+        lv_refr_now(NULL);
+        lv_tick_inc(40);
+        delay(40);
     }
-    for (int v = 200; v >= 0; v -= 2) {
+    for (int v = 200; v >= 0; v -= 5) {
         snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lbl_speed, buf);
         lv_obj_center(lbl_speed);
-        lv_tick_inc(8);
-        lv_timer_handler();
-        delay(8);
+        lv_refr_now(NULL);
+        lv_tick_inc(40);
+        delay(40);
     }
 }
 
