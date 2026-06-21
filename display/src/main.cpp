@@ -79,6 +79,27 @@ static void build_ui() {
     lv_obj_center(lbl_speed);
 }
 
+// ─── Boot animation — balayage 0→200→0 façon compteur de course ──────────────
+static void play_boot_animation() {
+    char buf[8];
+    for (int v = 0; v <= 200; v += 2) {
+        snprintf(buf, sizeof(buf), "%d", v);
+        lv_label_set_text(lbl_speed, buf);
+        lv_obj_center(lbl_speed);
+        lv_tick_inc(8);
+        lv_timer_handler();
+        delay(8);
+    }
+    for (int v = 200; v >= 0; v -= 2) {
+        snprintf(buf, sizeof(buf), "%d", v);
+        lv_label_set_text(lbl_speed, buf);
+        lv_obj_center(lbl_speed);
+        lv_tick_inc(8);
+        lv_timer_handler();
+        delay(8);
+    }
+}
+
 // ─── UI refresh ───────────────────────────────────────────────────────────────
 static void refresh_ui(const TelemetryMsg &t) {
     char buf[16];
@@ -145,6 +166,7 @@ void setup() {
     lv_indev_drv_register(&indev_drv);
 
     build_ui();
+    play_boot_animation();
 
     // ESP-NOW
     WiFi.mode(WIFI_STA);
