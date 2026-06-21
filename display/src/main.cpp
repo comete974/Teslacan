@@ -63,7 +63,6 @@ static volatile bool data_ready = false;
 
 // ─── UI elements ──────────────────────────────────────────────────────────────
 static lv_obj_t *lbl_speed;
-static lv_obj_t *lbl_unit;
 static lv_obj_t *lbl_limit;
 static lv_obj_t *lbl_gear;
 static lv_obj_t *lbl_mute;
@@ -79,14 +78,8 @@ static void build_ui() {
     lbl_speed = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_speed, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_color(lbl_speed, lv_color_white(), 0);
-    lv_obj_align(lbl_speed, LV_ALIGN_CENTER, 0, -15);
+    lv_obj_align(lbl_speed, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(lbl_speed, "0");
-
-    lbl_unit = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_unit, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl_unit, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
-    lv_obj_align(lbl_unit, LV_ALIGN_CENTER, 0, 40);
-    lv_label_set_text(lbl_unit, "km/h");
 
     // ── Limite de vitesse (haut centre) ──────────────────────────────────────
     lbl_limit = lv_label_create(scr);
