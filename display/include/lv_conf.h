@@ -30,12 +30,12 @@
 #define LV_FONT_DEFAULT       &lv_font_montserrat_24
 
 /* Enable needed widgets */
-#define LV_USE_ARC    0
+#define LV_USE_ARC    1
 #define LV_USE_LABEL  1
 #define LV_USE_METER  0
-#define LV_USE_IMG    0
-#define LV_USE_LINE   0
-#define LV_USE_BTN    0
+#define LV_USE_IMG    1
+#define LV_USE_LINE   1
+#define LV_USE_BTN    1
 #define LV_USE_CONT   0
 
 /* Animations */
