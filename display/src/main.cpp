@@ -82,21 +82,23 @@ static void build_ui() {
 }
 
 // ─── Boot animation — balayage 0→200→0 façon compteur de course ──────────────
+// On affiche 1 valeur sur 3 (pas de 15 au lieu de 5) : moins de redraws, donc
+// moins de risque d'artefacts, tout en gardant un mouvement fluide à l'oeil.
 static void play_boot_animation() {
     char buf[8];
-    for (int v = 0; v <= 200; v += 5) {
+    for (int v = 0; v <= 200; v += 15) {
         snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lbl_speed, buf);
         lv_refr_now(NULL);
-        lv_tick_inc(40);
-        delay(40);
+        lv_tick_inc(110);
+        delay(110);
     }
-    for (int v = 200; v >= 0; v -= 5) {
+    for (int v = 200; v >= 0; v -= 15) {
         snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lbl_speed, buf);
         lv_refr_now(NULL);
-        lv_tick_inc(40);
-        delay(40);
+        lv_tick_inc(110);
+        delay(110);
     }
 }
 
