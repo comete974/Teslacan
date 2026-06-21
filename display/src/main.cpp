@@ -63,89 +63,40 @@ static volatile bool data_ready = false;
 
 // ─── UI elements ──────────────────────────────────────────────────────────────
 static lv_obj_t *lbl_speed;
-static lv_obj_t *lbl_limit;
-static lv_obj_t *lbl_gear;
-static lv_obj_t *lbl_mute;
-static lv_obj_t *lbl_soc;
-static lv_obj_t *lbl_temp;
+
+// Montserrat 48 is the largest bundled lvgl font; scale it up via transform zoom
+// (256 = 1x). x10 would be ~480px wide and would overflow this 466px screen, so
+// pick the largest factor that still fits a 3-digit number: tune ZOOM if needed.
+#define SPEED_ZOOM 700
+
+static void center_speed_label() {
+    lv_obj_update_layout(lbl_speed);
+    lv_obj_set_style_transform_pivot_x(lbl_speed, lv_obj_get_width(lbl_speed) / 2, 0);
+    lv_obj_set_style_transform_pivot_y(lbl_speed, lv_obj_get_height(lbl_speed) / 2, 0);
+    lv_obj_center(lbl_speed);
+}
 
 static void build_ui() {
     lv_obj_t *scr = lv_scr_act();
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    // ── Vitesse — grand chiffre centré ───────────────────────────────────────
+    // ── Vitesse — seul élément affiché ────────────────────────────────────────
     lbl_speed = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_speed, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_color(lbl_speed, lv_color_white(), 0);
-    lv_obj_align(lbl_speed, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(lbl_speed, "0");
-
-    // ── Limite de vitesse (haut centre) ──────────────────────────────────────
-    lbl_limit = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_limit, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(lbl_limit, lv_palette_main(LV_PALETTE_BLUE), 0);
-    lv_obj_align(lbl_limit, LV_ALIGN_TOP_MID, 0, 55);
-    lv_label_set_text(lbl_limit, "");
-
-    // ── Statut bas ───────────────────────────────────────────────────────────
-    lbl_gear = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_gear, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_color(lbl_gear, lv_palette_main(LV_PALETTE_CYAN), 0);
-    lv_obj_align(lbl_gear, LV_ALIGN_BOTTOM_LEFT, 50, -50);
-    lv_label_set_text(lbl_gear, "P");
-
-    lbl_mute = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl_mute, lv_palette_main(LV_PALETTE_YELLOW), 0);
-    lv_obj_align(lbl_mute, LV_ALIGN_BOTTOM_MID, 0, -45);
-    lv_label_set_text(lbl_mute, "");
-
-    lbl_soc = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_soc, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl_soc, lv_palette_main(LV_PALETTE_GREEN), 0);
-    lv_obj_align(lbl_soc, LV_ALIGN_BOTTOM_RIGHT, -50, -60);
-    lv_label_set_text(lbl_soc, "--%");
-
-    lbl_temp = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_temp, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl_temp, lv_palette_lighten(LV_PALETTE_GREY, 1), 0);
-    lv_obj_align(lbl_temp, LV_ALIGN_BOTTOM_RIGHT, -50, -38);
-    lv_label_set_text(lbl_temp, "--\xC2\xB0""C");
+    lv_obj_set_style_transform_zoom(lbl_speed, SPEED_ZOOM, 0);
+    center_speed_label();
 }
 
 // ─── UI refresh ───────────────────────────────────────────────────────────────
-static const char *gear_str(uint8_t g) {
-    switch (g) {
-        case 1:  return "R";
-        case 2:  return "N";
-        case 3:  return "D";
-        default: return "P";
-    }
-}
-
 static void refresh_ui(const TelemetryMsg &t) {
     char buf[16];
 
     snprintf(buf, sizeof(buf), "%d", (int)t.speed_kmh);
     lv_label_set_text(lbl_speed, buf);
-
-    lv_label_set_text(lbl_gear, gear_str(t.gear));
-
-    if (t.speed_limit_kmh > 0) {
-        snprintf(buf, sizeof(buf), "%d", (int)t.speed_limit_kmh);
-        lv_label_set_text(lbl_limit, buf);
-    } else {
-        lv_label_set_text(lbl_limit, "--");
-    }
-
-    lv_label_set_text(lbl_mute, t.beep_muted ? "MUTE" : "");
-
-    snprintf(buf, sizeof(buf), "%d%%", t.soc);
-    lv_label_set_text(lbl_soc, buf);
-
-    snprintf(buf, sizeof(buf), "%d\xC2\xB0""C", t.outside_temp);
-    lv_label_set_text(lbl_temp, buf);
+    center_speed_label();
 
     lv_color_t c;
     if (t.speed_limit_kmh > 0 && t.speed_kmh > t.speed_limit_kmh + 3.0f)
