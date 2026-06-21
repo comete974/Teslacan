@@ -64,18 +64,6 @@ static volatile bool data_ready = false;
 // ─── UI elements ──────────────────────────────────────────────────────────────
 static lv_obj_t *lbl_speed;
 
-// Montserrat 48 is the largest bundled lvgl font; scale it up via transform zoom
-// (256 = 1x). x10 would be ~480px wide and would overflow this 466px screen, so
-// pick the largest factor that still fits a 3-digit number: tune ZOOM if needed.
-#define SPEED_ZOOM 700
-
-static void center_speed_label() {
-    lv_obj_update_layout(lbl_speed);
-    lv_obj_set_style_transform_pivot_x(lbl_speed, lv_obj_get_width(lbl_speed) / 2, 0);
-    lv_obj_set_style_transform_pivot_y(lbl_speed, lv_obj_get_height(lbl_speed) / 2, 0);
-    lv_obj_center(lbl_speed);
-}
-
 static void build_ui() {
     lv_obj_t *scr = lv_scr_act();
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
@@ -86,8 +74,7 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_speed, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_color(lbl_speed, lv_color_white(), 0);
     lv_label_set_text(lbl_speed, "0");
-    lv_obj_set_style_transform_zoom(lbl_speed, SPEED_ZOOM, 0);
-    center_speed_label();
+    lv_obj_center(lbl_speed);
 }
 
 // ─── UI refresh ───────────────────────────────────────────────────────────────
@@ -96,7 +83,7 @@ static void refresh_ui(const TelemetryMsg &t) {
 
     snprintf(buf, sizeof(buf), "%d", (int)t.speed_kmh);
     lv_label_set_text(lbl_speed, buf);
-    center_speed_label();
+    lv_obj_center(lbl_speed);
 
     lv_color_t c;
     if (t.speed_limit_kmh > 0 && t.speed_kmh > t.speed_limit_kmh + 3.0f)
