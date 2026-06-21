@@ -8,6 +8,8 @@
 #include "../../shared/protocol.h"
 #include "config.h"
 
+LV_FONT_DECLARE(conthrax_200);
+
 // ─── Display CO5300 via QSPI ─────────────────────────────────────────────────
 static Arduino_DataBus *bus = new Arduino_ESP32QSPI(
     LCD_CS, LCD_CLK, LCD_D0, LCD_D1, LCD_D2, LCD_D3);
@@ -71,7 +73,7 @@ static void build_ui() {
 
     // ── Vitesse — seul élément affiché ────────────────────────────────────────
     lbl_speed = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_speed, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_font(lbl_speed, &conthrax_200, 0);
     lv_obj_set_style_text_color(lbl_speed, lv_color_white(), 0);
     lv_label_set_text(lbl_speed, "0");
     lv_obj_center(lbl_speed);
