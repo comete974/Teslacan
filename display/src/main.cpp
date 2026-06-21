@@ -75,8 +75,10 @@ static void build_ui() {
     lbl_speed = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_speed, &conthrax_200, 0);
     lv_obj_set_style_text_color(lbl_speed, lv_color_white(), 0);
+    lv_obj_set_style_text_align(lbl_speed, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_size(lbl_speed, DISPLAY_W, 200);
     lv_label_set_text(lbl_speed, "0");
-    lv_obj_center(lbl_speed);
+    lv_obj_align(lbl_speed, LV_ALIGN_CENTER, 0, 0);
 }
 
 // ─── Boot animation — balayage 0→200→0 façon compteur de course ──────────────
@@ -85,7 +87,6 @@ static void play_boot_animation() {
     for (int v = 0; v <= 200; v += 5) {
         snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lbl_speed, buf);
-        lv_obj_center(lbl_speed);
         lv_refr_now(NULL);
         lv_tick_inc(40);
         delay(40);
@@ -93,7 +94,6 @@ static void play_boot_animation() {
     for (int v = 200; v >= 0; v -= 5) {
         snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lbl_speed, buf);
-        lv_obj_center(lbl_speed);
         lv_refr_now(NULL);
         lv_tick_inc(40);
         delay(40);
@@ -106,7 +106,6 @@ static void refresh_ui(const TelemetryMsg &t) {
 
     snprintf(buf, sizeof(buf), "%d", (int)t.speed_kmh);
     lv_label_set_text(lbl_speed, buf);
-    lv_obj_center(lbl_speed);
 
     lv_color_t c;
     if (t.speed_limit_kmh > 0 && t.speed_kmh > t.speed_limit_kmh + 3.0f)
